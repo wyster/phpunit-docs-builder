@@ -50,11 +50,13 @@ jobs:
 
       - name: Prepare artifacts
         working-directory: phpunit-docs
+        continue-on-error: true
         run: |
           mv output/${{ matrix.phpunit }}/epub/*.epub output/${{ matrix.phpunit }}/docs.epub
 
       - name: Artifacts
         uses: actions/upload-artifact@v2
+        if: ${{ success() }}
         with:
           name: ${{ matrix.phpunit }}
           path: |
@@ -82,7 +84,6 @@ jobs:
 
       - name: Commit changes
         working-directory: github-io
-        continue-on-error: true
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
