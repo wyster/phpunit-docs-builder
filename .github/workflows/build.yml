@@ -84,6 +84,7 @@ jobs:
 
       - name: Commit changes
         working-directory: github-io
+        continue-on-error: true
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
@@ -92,6 +93,7 @@ jobs:
 
       - name: Push changes to github.io
         uses: ad-m/github-push-action@master
+        continue-on-error: true
         with:
           github_token: ${{ secrets.SECRET_TOKEN }}
           branch: main
