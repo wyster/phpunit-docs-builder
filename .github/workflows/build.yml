@@ -1,0 +1,98 @@
+name: Build and Publish Docs
+on:
+  push:
+    branches: [ 'master' ]
+
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    name: Build for PHPUnit ${{ matrix.phpunit }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        phpunit: ['master']
+
+    steps:
+      - name: Checkout the repo
+        uses: actions/checkout@v2
+        with:
+          path: phpunit-docs
+
+      - uses: satackey/action-docker-layer-caching@v0.0.11
+        continue-on-error: true
+        with:
+          key: docker-cache-${{ matrix.phpunit }}
+          restore-keys: |
+            docker-cache-
+
+      - uses: actions/cache@v2
+        with:
+          path: phpunit-docs/output
+          key: ${{ runner.os }}
+
+      - name: Build Docker Image
+        working-directory: phpunit-docs
+        run: |
+          docker build --tag=phpunit-docs-builder --build-arg BRANCH=${{ matrix.phpunit }} .
+          mkdir -p output/${{ matrix.phpunit }}
+
+      - name: Build Epub
+        working-directory: phpunit-docs
+        run: |
+          docker run --rm -v "${PWD}/output/${{ matrix.phpunit }}:/output" --user="$(id -u):$(id -g)" phpunit-docs-builder epub
+
+      - name: Build HTML
+        working-directory: phpunit-docs
+        run: |
+          docker run --rm -v "${PWD}/output/${{ matrix.phpunit }}:/output" --user="$(id -u):$(id -g)" phpunit-docs-builder html
+
+      - name: Prepare artifacts
+        working-directory: phpunit-docs
+        run: |
+          mv output/${{ matrix.phpunit }}/epub/*.epub output/${{ matrix.phpunit }}/docs.epub
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.phpunit }}
+          path: |
+            phpunit-docs/output/${{ matrix.phpunit }}
+            !phpunit-docs/output/${{ matrix.phpunit }}/doctrees
+            !phpunit-docs/output/${{ matrix.phpunit }}/epub
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout the repo
+        uses: actions/checkout@v2
+        with:
+          repository: wyster/wyster.github.io
+          persist-credentials: false
+          path: github-io
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v2
+        with:
+          path: github-io/phpunit-docs
+
+      - name: Commit changes
+        working-directory: github-io
+        continue-on-error: true
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "Generate docs for SF"
+
+      - name: Push changes to github.io
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.SECRET_TOKEN }}
+          branch: main
+          repository: wyster/wyster.github.io
+          directory: github-io
